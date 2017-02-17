@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+//#include "bpTree.c"
+
 ////
 #ifndef FMACROS // garante que macros.h não seja reincluída
    #include "macros.h"
@@ -25,6 +28,7 @@
 #ifndef FEXPRESSAO
   #include "Expressao.h"
 #endif
+
 /* ----------------------------------------------------------------------------------------------
     Objetivo:   Recebe o nome de uma tabela e engloba as funções leObjeto() e leSchema().
     Parametros: Nome da Tabela, Objeto da Tabela e tabela.
@@ -319,17 +323,25 @@ int finalizaInsert(char *nome, column *c){
               erro = SUCCESS;
             break;
 
-            case PK:
-              erro = verificaChavePK(nome, temp , temp->nomeCampo, temp->valorCampo);
-              if (erro == ERRO_CHAVE_PRIMARIA){
-                  printf("ERROR: duplicate key value violates unique constraint \"%s_pkey\"\nDETAIL:  Key (%s)=(%s) already exists.\n", nome, temp->nomeCampo, temp->valorCampo);
-
+            case PK:              
+              // FUNÇÃO QUE VARRE A B+ VERIFICANDO DUPLICAÇÃO DA PK
+              erro = verificaDuplicidade(atoi(temp->valorCampo), nome);
+              //
+              if (erro == 0){ // B+ detectou duplicidade de PK
 				          free(auxT); // Libera a memoria da estrutura.
-				          //free(temp); // Libera a memoria da estrutura.
 				          free(tab); // Libera a memoria da estrutura.
 				          free(tab2); // Libera a memoria da estrutura.
                   return ERRO_CHAVE_PRIMARIA;
               }
+
+              // SE CHEGOU AQUI É PORQUE VALOR NAO E DUPLICADO, VALOR VERIFICADO NA ARVORE B+
+
+              strcat(nome, "_index.dat");
+              
+              // PASSA POR PARAMETRO DA FUNCAO O VALOR INSERIDO E O NOME DO ARQUIVO DE INDICES DA TABELA
+              // NESTA FUNCAO ESSE VALOR SERA INSERIDO NA ARVORE B+ E NO ARQUIVO DE INDICES (ORDENADO)              
+              valueInsert(atoi(temp->valorCampo), nome);
+
             break;
 
             case FK:
@@ -442,11 +454,11 @@ int finalizaInsert(char *nome, column *c){
             while (x < strlen(auxC->valorCampo)){
                 if((auxC->valorCampo[x] < 48 || auxC->valorCampo[x] > 57) && (auxC->valorCampo[x] != 46)){
                     printf("ERROR: column \"%s\" expect double.\n", auxC->nomeCampo);
-					free(tab); // Libera a memoria da estrutura.
-					free(tab2); // Libera a memoria da estrutura.
-					free(auxT); // Libera a memoria da estrutura.
-					free(temp); // Libera a memoria da estrutura.
-					fclose(dados);
+          					free(tab);  // Libera a memoria da estrutura.
+          					free(tab2); // Libera a memoria da estrutura.
+          					free(auxT); // Libera a memoria da estrutura.
+          					free(temp); // Libera a memoria da estrutura.
+          					fclose(dados);
                     return ERRO_NO_TIPO_DOUBLE;
                 }
                 x++;
@@ -459,11 +471,11 @@ int finalizaInsert(char *nome, column *c){
 
             if (strlen(auxC->valorCampo) > (sizeof(char))) {
                 printf("ERROR: column \"%s\" expect char.\n", auxC->nomeCampo);
-				free(tab); // Libera a memoria da estrutura.
-				free(tab2); // Libera a memoria da estrutura.
-				free(auxT); // Libera a memoria da estrutura.
-				free(temp); // Libera a memoria da estrutura.
-				fclose(dados);
+        				free(tab);  // Libera a memoria da estrutura.
+        				free(tab2); // Libera a memoria da estrutura.
+        				free(auxT); // Libera a memoria da estrutura.
+        				free(temp); // Libera a memoria da estrutura.
+        				fclose(dados);
                 return ERRO_NO_TIPO_CHAR;
             }
             char valorChar = auxC->valorCampo[0];
@@ -473,7 +485,7 @@ int finalizaInsert(char *nome, column *c){
     }
 
   fclose(dados);
-  free(tab); // Libera a memoria da estrutura.
+  free(tab);  // Libera a memoria da estrutura.
   free(tab2); // Libera a memoria da estrutura.
   free(auxT); // Libera a memoria da estrutura.
   free(temp); // Libera a memoria da estrutura.
@@ -542,14 +554,12 @@ void insert(rc_insert *s_insert) {
 
   if (!flag && finalizaInsert(s_insert->objName, colunas) == SUCCESS)
     printf("INSERT 0 1\n");
-
-	//freeTp_table(&esquema, objeto.qtdCampos);
-	free(esquema);
-	freeColumn(colunas);
-	freeTable(tabela);
+    //freeTp_table(&esquema, objeto.qtdCampos);
+    free(esquema);
+    //freeColumn(colunas);
+    freeTable(tabela);
 }
 
-//select * from t4;
 int validaProj(Lista *proj,column *colunas,int qtdColunas,char *pert){
   if(proj->tam == 1 && ((char *)proj->prim->inf)[0] == '*'){
     free(rmvNodoPtr(proj,proj->prim));
@@ -908,6 +918,8 @@ int excluirTabela(char *nomeTabela) {
     int x,erro, i, j, k, l, qtTable;
     char str[20];
     char dat[5] = ".dat";
+    char path[200];
+
     memset(str, '\0', 20);
 
     if (!verificaNomeTabela(nomeTabela)) {
@@ -995,6 +1007,18 @@ int excluirTabela(char *nomeTabela) {
    	strcpy(directory, connected.db_directory);
     strcat(directory, str);
     remove(directory);
+
+    // Para remover o arquivo de indices tambem
+    strcat(directory, "_index.dat");
+    strcpy(path, "data/uffsdb/");
+    strcat(path, nomeTabela);
+    strcat(path, "_index.dat");
+    //
+    //printf("DROPANDO DIRECTORY: %s\n", path);
+    remove(path);
+
+    //
+
     free(bufferpoll);
     printf("DROP TABLE\n");
     return SUCCESS;
@@ -1021,7 +1045,8 @@ void createTable(rc_insert *t) {
       printf("A table name must have no more than %d caracteres.\n",TAMANHO_NOME_TABELA);
       return;
   }
-	int size;
+  int size;
+  // DA NOME PARA A TABELA
   strcpylower(t->objName, t->objName);        //muda pra minúsculo
   char *tableName = (char*) malloc(sizeof(char)*(TAMANHO_NOME_TABELA+10)),
                     fkTable[TAMANHO_NOME_TABELA], fkColumn[TAMANHO_NOME_CAMPO];
@@ -1033,9 +1058,25 @@ void createTable(rc_insert *t) {
     free(tableName);
     return;
   }
+  // FIM DA  NOME TABELA
+  // DA NOME INDEX
+  char * indexName = (char*) malloc(sizeof(char)*(TAMANHO_NOME_TABELA+20));
+
+  strncpylower(indexName, t->objName, TAMANHO_NOME_TABELA);
+  strcat(indexName, "_index.dat\0");                  //tableName.dat
+  if(existeArquivo(indexName)){
+    printf("ERROR: INDEX table already exist\n");
+    free(indexName);
+    return;
+  }
+
+  // FIM DA NOME INDEX
 
   table *tab = NULL;
-  tab = iniciaTabela(t->objName);    //cria a tabela
+  table *tabIndex = NULL;
+  tab = iniciaTabela(t->objName);     //cria a tabela
+  tabIndex = iniciaTabela(indexName); //cria a index
+
   if(0 == verifyFieldName(t->columnName, t->N)){
     free(tableName);
     freeTable(tab);
@@ -1059,6 +1100,12 @@ void createTable(rc_insert *t) {
   		strcpy(fkTable, "");
   		strcpy(fkColumn, "");
   	}
+
+    if(t->attribute[i] == PK){      
+      // CRIA ARQUIVO DE INDICES COM O NOME DA TABELA CRIADA, ARQUIVO INICIA VAZIO --> nomeTabela_index.dat
+      criaArqIndices(indexName);
+    }
+
     tab = adicionaCampo(tab, t->columnName[i], t->type[i], size, t->attribute[i], fkTable, fkColumn);
     if((objcmp(fkTable, "") != 0) || (objcmp(fkColumn, "") != 0)){
       if(verifyFK(fkTable, fkColumn) == 0){
@@ -1074,4 +1121,3 @@ void createTable(rc_insert *t) {
   free(tableName);
   if(tab != NULL) freeTable(tab);
 }
-///////

@@ -22,6 +22,8 @@
    #include "buffer.h"
 #endif
 
+
+
 /* ----------------------------------------------------------------------------------------------
     Objetivo:   Verificação de existência de um arquivo.
     Parametros: Nome do arquivo.
@@ -134,27 +136,39 @@ int verificaNomeTabela(char *nomeTabela) {
 }
 ////
 int quantidadeTabelas(){
-
     FILE *dicionario;
     int codTbl = 0;
-
     char directory[LEN_DB_NAME_IO];
     strcpy(directory, connected.db_directory);
     strcat(directory, "fs_object.dat");
 
     if((dicionario = fopen(directory,"a+b")) == NULL)
         return ERRO_ABRIR_ARQUIVO;
-
     while(fgetc (dicionario) != EOF){
         fseek(dicionario, -1, 1);
-
         codTbl++; // Conta quantas vezes é lido uma tupla no dicionario.
 
         fseek(dicionario, 48, 1);
     }
-
     fclose(dicionario);
+    return codTbl;
+}
+int quantidadeTabelasIndex(){
+    FILE *dicionario;
+    int codTbl = 0;
+    char directory[LEN_DB_NAME_IO];
+    strcpy(directory, connected.db_directory);
+    strcat(directory, "fs_objectIndex.dat");
 
+    if((dicionario = fopen(directory,"a+b")) == NULL)
+        return ERRO_ABRIR_ARQUIVO;
+    while(fgetc (dicionario) != EOF){
+        fseek(dicionario, -1, 1);
+        codTbl++; // Conta quantas vezes é lido uma tupla no dicionario.
+
+        fseek(dicionario, 48, 1);
+    }
+    fclose(dicionario);
     return codTbl;
 }
 
@@ -531,17 +545,25 @@ int finalizaTabela(table *t){
     if(t == NULL)
         return ERRO_DE_PARAMETRO;
 
-    FILE *esquema, *dicionario;
+    FILE *esquema,*esquemaIndex, *dicionario, *dicionarioIn;
     tp_table *aux;
     int codTbl = quantidadeTabelas() + 1, qtdCampos = 0; // Conta a quantidade de tabelas já no dicionario e soma 1 no codigo dessa nova tabela.
-    char nomeArquivo[TAMANHO_NOME_ARQUIVO];
+    int codIndexTbl = quantidadeTabelasIndex() + 1, qtdCamposIndex = 0; // Conta a quantidade de tabelas INDICES Adicionados dicionario e soma 1 no codigo dessa nova tabela.
+    char nomeArquivo[TAMANHO_NOME_ARQUIVO], nomeArquivoIn[TAMANHO_NOME_ARQUIVO+10];
     memset(nomeArquivo, 0, TAMANHO_NOME_ARQUIVO);
 
-    char directory[LEN_DB_NAME_IO];
+    char directory[LEN_DB_NAME_IO],directoryIndex[LEN_DB_NAME_IO];
     strcpy(directory, connected.db_directory);
     strcat(directory, "fs_schema.dat");
 
-    if((esquema = fopen(directory,"a+b")) == NULL)
+    // da odiretorio do ARQUIVOS DOS SCHEMA DOS iNDICES
+    strcpy(directoryIndex, connected.db_directory);
+    strcat(directoryIndex, "fs_schemaIndex.dat");
+
+    if((esquema = fopen(directory,"a+b")) == NULL)  // aqui cria o arquivo fisico fs_schema
+        return ERRO_ABRIR_ARQUIVO;
+
+    if((esquemaIndex = fopen(directoryIndex,"a+b")) == NULL)  // aqui cria o arquivo fisico fs_schema_Index
         return ERRO_ABRIR_ARQUIVO;
 
     for(aux = t->esquema; aux != NULL; aux = aux->next){ // Salva novos campos no esquema da tabela, fs_schema.dat
@@ -557,7 +579,27 @@ int finalizaTabela(table *t){
         qtdCampos++; // Soma quantidade total de campos inseridos.
     }
 
+        //// agora vai gravar somente atributo que é PK
+
+   for(aux = t->esquema; aux != NULL; aux = aux->next){ // Salva novos campos no esquema da tabela, fs_schema.dat
+
+       if (aux->chave == PK){ //  se o atributo e PK entao ele grava
+            fwrite(&codIndexTbl         ,sizeof(codTbl)         ,1,esquemaIndex);  //Código Tabela
+            fwrite(&aux->nome      ,sizeof(aux->nome)      ,1,esquemaIndex);  //Nome campo
+            fwrite(&aux->tipo      ,sizeof(aux->tipo)      ,1,esquemaIndex);  //Tipo campo
+            fwrite(&aux->tam       ,sizeof(aux->tam)       ,1,esquemaIndex);  //Tamanho campo
+            fwrite(&aux->chave     ,sizeof(aux->chave)     ,1,esquemaIndex);  //Chave do campo
+            fwrite(&aux->tabelaApt ,sizeof(aux->tabelaApt) ,1,esquemaIndex);  //Tabela Apontada
+            fwrite(&aux->attApt    ,sizeof(aux->attApt)    ,1,esquemaIndex);  //Atributo apontado.
+
+            qtdCamposIndex++; // Soma quantidade total de campos inseridos.
+        }
+
+    }
     fclose(esquema);
+    fclose(esquemaIndex);
+
+////////////////////////////////////////AQUIE TERMINO COM O SCHEMA    /////////////////////////////////////////
 
     strcpy(directory, connected.db_directory);
     strcat(directory, "fs_object.dat");
@@ -575,9 +617,33 @@ int finalizaTabela(table *t){
     fwrite(&qtdCampos,sizeof(qtdCampos),1,dicionario);
 
     fclose(dicionario);
+
+    // AQUI TERMINA OBJECT NORMAL
+    // AQUI COMECA OBJECT INDEX
+
+    strcpy(directoryIndex, connected.db_directory);
+    strcat(directoryIndex, "fs_objectIndex.dat");
+
+    if((dicionarioIn = fopen(directoryIndex,"a+b")) == NULL)
+        return ERRO_ABRIR_ARQUIVO;
+
+
+    strcpylower(nomeArquivoIn, t->nome);
+    strcat(nomeArquivoIn, "_Index.dat\0");
+    strcat(t->nome, "\0");
+    // Salva dados sobre a tabela no dicionario.
+    fwrite(&t->nome,sizeof(t->nome),1,dicionarioIn);
+    fwrite(&codTbl,sizeof(codTbl),1,dicionarioIn);
+    fwrite(&nomeArquivoIn,sizeof(nomeArquivoIn),1,dicionarioIn);
+    fwrite(&qtdCampos,sizeof(qtdCampos),1,dicionarioIn);
+
+    fclose(dicionarioIn);
+
+    // AQUI TERMINA OBJECT INDEX
     return SUCCESS;
 }
-////
+
+
 // INSERE NA TABELA
 column *insereValor(table  *tab, column *c, char *nomeCampo, char *valorCampo) {
     int i;

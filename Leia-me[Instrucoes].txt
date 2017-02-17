@@ -349,3 +349,90 @@ Os comandos SQL e os objetos das relações (i.e. <NomeTabelas>, <NomeCampos> ..
 	ex: 
 		<TABELA> e <tabela> se referem a mesma relação.
 		<INSERT> e <insert> se referem ao mesmo comando SQL.
+
+############## LEIA-ME PARTE 5 #############################################################################################################
+
+=> 17 de fevereiro de 2017 <=
+
+Universidade Federal da Fronteira Sul – UFFS
+Curso: Ciência da Computação
+Componente Curricular: Banco de Dados II
+Professor: Dr. Denio Duarte
+Alunos: Diego Wickert, Roberto Delavi.
+=============================================================================================================================================
+
+Este projeto possui o intuito de fazer a verificação das chaves primárias por meio de índices B+. 
+
+- Ao inserir um índice primary key, o mesmo é enviado para o arquivo 'bpTree.c' através da função 'valueInsert(vlr, nomeTabela)' para ser inserido na árvore B+.
+
+- Após inserir o índice na árvore B+, o mesmo também é inserido em disco, num arquivo nomeado como '<nomeTabela>_index.dat', sendo criado um arquivo para cada tabela, cada arquivo com seus respectivos índices. 
+
+- Toda vez que é inserido um índice novo, ele é inserido na árvore através da função 'insertBP(root, vlr)' e as folhas da árvore são inseridas no arquivo de índices ordenadamente através da função 'escreveIndiceArquivo(path, vlr)', mantendo o arquivo sempre atualizado com a árvore.
+
+- A árvore sempre terá em memória somente índices de uma única tabela. Quando é trocada a tabela de inserção, a árvore é zerada e carregada com os valores do 
+arquivo de índices da tabela corrente.
+
+- Antes de realizar a inserção na tabela, a função 'verificaDuplicidade(vlr, nomeTabela)' varre a ávore B+ verificando se há duplicidade de índice. Se é a primeira execução do programa e a árvore estiver vazia, mas o arquivo de índices conter índices, a árvore é carregada com os índices do arquivo e então é feita a verificação de duplicidade na árvore já carregada.
+
+------------------------- // -------------------------
+
+// Estrutura da árvore B+
+//
+typedef struct node{
+	void ** pointers;
+	int * keys;
+	struct node * parent;
+	bool is_leaf;
+	int num_keys;
+	struct node * next; 
+}node;
+
+// Funções criadas no arquivo 'bpTree.c'
+------------------------- // -------------------------
+
+void valueInsert(int vlr, char * nome_arquivo_indices);
+//
+Esta função é responsável por receber o valor PK inserido na tabela, validar se árvore precisa ser carregado do árquivo e enviar o índice para as funções de inserção
+na árvore B+ e arquivo de índices.
+------------------------- // -------------------------
+
+int numIndicesArquivo(char * path);
+//
+Esta função retorna o número de índices já gravados no arquivo de índices da tabela corrente (valor utilizado para validar se árvore precisa ser carregada do arquivo 
+ou não).
+------------------------- // -------------------------
+
+void buscaFolhas(node * root, char * path);
+//
+Esta função busca as folhas da árvore B+, quando encontra, é chamada a função 'escreveIndiceArquivo(path, vlr)', passando o índice daquela folha por parâmetro para 
+ser inserido somente as folhas no arquivo de índices. 
+------------------------- // -------------------------
+
+int * leArquivoIndice(char * path);
+//
+Esta função lê todos os índices do arquivo de índices e insere os mesmos em um vetor. Este vetor é utilizado para carregar a árvore B+ em casos que há conteúdo no arquivo de índices mas a árvore está vazia (primeira inserção nesta execução do programa).
+------------------------- // -------------------------
+
+void limpaArquivoIndice(char * path);
+//
+Esta função limpa o arquivo de índices, para que depois possa ser carregada a árvore ordenada no arquivo e mantê-lo sempre ordenado.
+------------------------- // -------------------------
+
+void escreveIndiceArquivo(char * path, int key);
+//
+Esta função escreve o índice no arquivo de índices da tabela corrente.
+------------------------- // -------------------------
+
+void printaArquivoIndice(char * path);
+//
+Esta função simplesmente exibe os índices do arquivo de índices da tabela corrente.
+------------------------- // -------------------------
+
+int numKeyArvore(node * root);
+Esta função retorna o número de índices na árvore B+ (valor utilizado para validar se árvore precisa ser carregada do arquivo 
+ou não).
+------------------------- // -------------------------
+
+int verificaDuplicidade(int key, char * nomeTabela);
+//
+Esta função realiza a verificação da duplicidade do índice inserido. Ela recebe o índice por parâmetro, verifica se árvore está vazia, se sim, carrega a árvore com os índices do arquivo de índices. Após isso, é varrida a árvore B+ verificando se há duplicação de índices ou não. Se houver duplicação a função retorna 0, senão, retorna 1.

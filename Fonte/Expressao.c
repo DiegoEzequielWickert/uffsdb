@@ -27,6 +27,7 @@
   #include "sqlcommands.h"
 #endif
 
+
 int operador(int id){
   return (id == SINAL) || (id == ARITIMETICO);
 }

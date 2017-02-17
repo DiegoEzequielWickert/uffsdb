@@ -251,7 +251,7 @@ void setMode(char mode) {
 }
 
 int interface() {
-    pthread_t pth;
+    pthread_t pth;    
 
     pthread_create(&pth, NULL, (void*)clearGlobalStructs, NULL);
     pthread_join(pth, NULL);
